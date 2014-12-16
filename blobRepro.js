@@ -36,7 +36,10 @@ function convertDataBlobToFileBlob(blob) {
 				}
 				var objectStore = t.objectStore("fileStore");
 				var request = objectStore.put(blob);
-				blob.close();
+				// blob.close();
+				// ^^ this guarentees that the blob passed in is released.
+				// you have to enable --enable-experimental-web-platform-features
+				// (or see about://flags) to enable this.
 	  			request.onsuccess = function(event) {
 					resolve(request.result);
 	  			}
