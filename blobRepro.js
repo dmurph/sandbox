@@ -1,7 +1,9 @@
 console.log("blob repro");
 
-// Workaround for saving blobs larger than 500MB
-
+// Workaround for saving blobs larger than 500MB.
+// Main idea: add and then get the blob from indexeddb to
+// force it to be file-backed.  Then concatinate all of the file-backed
+// blobs to make the > 500MB blob that can then be downloaded.
 function convertDataBlobToFileBlob(blob) {
 	return new Promise(function(resolve, reject) {
 		var db;
@@ -90,16 +92,23 @@ function convertDataBlobToFileBlob(blob) {
 var blob = new Blob([new Uint8Array(200*1024*1024)], {type: 'application/octet-string'});
 console.log(blob);
 
-var done1;
-var url_a;
-convertDataBlobToFileBlob(blob).then(function(done) {
-		console.log("did it! ", done);
-		done1 = done;
-		var blob2 = new Blob([new Uint8Array(490*1024*1024)], {type: 'application/octet-string'});
-		return convertDataBlobToFileBlob(blob2);
-	}).then(function(done) {
-		console.log("did it 2, second blob: ", done);
-		var concat = new Blob([done1, done], {type: 'application/octet-string'});
+var allblobs = [];
+// you can create an array of promises, one for each chunk, and then resolve them all.
+convertDataBlobToFileBlob(blob).then(function(blob) {
+		console.log("did it! ", blob);
+		allblobs.push(blob);
+		var nextBlob = new Blob([new Uint8Array(200*1024*1024)], {type: 'application/octet-string'});
+		return convertDataBlobToFileBlob(nextBlob);
+	}).then(function(blob) {
+		console.log("did it 2! ", blob);
+		allblobs.push(blob);
+		var nextBlob = new Blob([new Uint8Array(200*1024*1024)], {type: 'application/octet-string'});
+		return convertDataBlobToFileBlob(nextBlob);
+	}).then(function(blob) {
+		console.log("did it 3!", blob);
+		allblobs.push(blob);
+	}).then(function() {
+		var concat = new Blob(allblobs, {type: 'application/octet-string'});
 		console.log("concatinated blob: ", concat);
 		url_a = URL.createObjectURL(concat); // You can open url_a
 		console.log(url_a);
