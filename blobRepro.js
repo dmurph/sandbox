@@ -1,5 +1,7 @@
 console.log("blob repro");
 
+// (this is ugly, I know.  writen as a proof of concept)
+
 // Workaround for saving blobs larger than 500MB.
 // Main idea: add and then get the blob from indexeddb to
 // force it to be file-backed.  Then concatinate all of the file-backed
