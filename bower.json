@@ -7,7 +7,6 @@
   "description": "Debug/repro/mess around",
   "main": "index.html",
   "license": "MIT",
-  "homepage": "https://github.com/dmurph/sw-status/",
   "ignore": [
     "/.*",
     "/tests/"
