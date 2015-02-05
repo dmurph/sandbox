@@ -44,9 +44,13 @@ var pdb = {
   count: function(indexOrObjectStore, key) {
     return this._transformRequestToPromise(indexOrObjectStore, indexOrObjectStore.count, [key]);
   },
-
+  
   put: function(objectStore, key, value) {
     return this._transformRequestToPromise(objectStore, objectStore.put, [key, value]);
+  },
+
+  add: function(objectStore, key, value) {
+    return this._transformRequestToPromise(objectStore, objectStore.add, [key, value]);
   },
 
   delete: function(objectStore, key) {
@@ -81,7 +85,7 @@ var logToConsole = function(value) {
 };
 
 var db;
-var version = 2.0;
+var version = 3.0;
 
 function initDb(oncomplete) {
   var request = indexedDB.open("TestDatabase", version);
@@ -125,7 +129,9 @@ var main = function() {
   .then(function() {
     return lookupBook("Test3");
   })
-  .then(logToConsole);
+  .then(logToConsole)
+  .then(function(x) { console.log("done!"); } )
+  .catch(logToConsole);
 }
 initDb(main);
 
@@ -148,8 +154,8 @@ var addMoreBooks = function() {
   return pdb.transact(db, "books", "readwrite")
     .then(function(txn) {
       var objectStore = txn.objectStore("books");
-      var p1 = pdb.put(objectStore, {title: "Test2", author: "Fred", isbn: 1234526});
-      var p2 = pdb.put(objectStore, {title: "Test3", author: "Barney", isbn: 12526});
+      var p1 = pdb.add(objectStore, {title: "Test2", author: "Fred", isbn: 1234526});
+      var p2 = pdb.add(objectStore, {title: "Test3", author: "Barney", isbn: 1234526});
       return Promise.all([p1, p2, pdb.waitForTransaction(txn)]);
     });
 }
