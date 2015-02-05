@@ -1,11 +1,21 @@
 var pdb = {
+  _transformRequestToPromise: function(thisobj, func, argArray) {
+    return new Promise(function(resolve, reject) {
+      var request = func.apply(thisobj, argArray);
+      request.onsuccess = function() {
+        resolve(request.result);
+      };
+      request.onerror = reject;
+    })
+  },
+
   transact: function(db, objectStores, style) {
     return Promise.resolve(db.transaction(objectStores, style));
   },
 
-  openIndexCursor: function(txn, index, keyrange, callback) {
+  openCursor: function(txn, indexOrObjectStore, keyrange, callback) {
     return new Promise(function(resolve, reject) {
-      var request = index.openCursor(keyrange);
+      var request = indexOrObjectStore.openCursor(keyrange);
       request.onerror = reject;
       request.onsuccess = function() {
         var cursor = request.result;
@@ -27,65 +37,51 @@ var pdb = {
     });
   },
 
-  openObjectStoreCursor: function(txn, objectStore, keyrange, callback) {
-    return new Promise(function(resolve, reject) {
-      var request = objectStore.openCursor(keyrange);
-      request.onerror = reject;
-      request.onsuccess = function() {
-        var cursor = request.result;
-        var cont = false;
-        var control = {
-          continue: function() {cont = true;}
-        };
-        if (cursor) {
-          callback(control, cursor.value);
-          if (cont) {
-            cursor.continue();
-          } else {
-            resolve(txn);
-          }
-        } else {
-          resolve(txn);
-        }
-      };
-    });
+  get: function(indexOrObjectStore, key) {
+    return this._transformRequestToPromise(indexOrObjectStore, indexOrObjectStore.get, [key]);
   },
 
-  openObjectStoreCursor: function(txn, objectStore, keyrange, callback) {
-    return new Promise(function(resolve, reject) {
-      var request = objectStore.openCursor(keyrange);
-      request.onerror = reject;
-      request.onsuccess = function() {
-        var cursor = request.result;
-        var cont = false;
-        var control = {
-          continue: function() {cont = true;}
-        };
-        if (cursor) {
-          callback(control, cursor.value);
-          if (cont) {
-            cursor.continue();
-          } else {
-            resolve(txn);
-          }
-        } else {
-          resolve(txn);
-        }
-      };
-    });
+  count: function(indexOrObjectStore, key) {
+    return this._transformRequestToPromise(indexOrObjectStore, indexOrObjectStore.count, [key]);
   },
-  transactionDone: function(txn) {
+
+  put: function(objectStore, key, value) {
+    return this._transformRequestToPromise(objectStore, objectStore.put, [key, value]);
+  },
+
+  delete: function(objectStore, key) {
+    return this._transformRequestToPromise(objectStore, objectStore.delete, [key]);
+  },
+
+  clear: function(objectStore) {
+    return this._transformRequestToPromise(objectStore, objectStore.clear, []);
+  },
+
+  getKey: function(index, key) {
+    return this._transformRequestToPromise(index, index.getKey, [key]);
+  },
+
+
+  waitForTransaction: function(txn) {
     return new Promise(function(resolve, reject) {
       txn.oncomplete = resolve;
       txn.onerror = reject;
       txn.onabort = reject;
     });
   },
+  waitForTransactionFcn: function(txn) {
+    return function() {
+      return this.waitForTransaction(txn);
+    };
+  },
 }
 
+var logToConsole = function(value) {
+  console.log(value);
+};
 
 var db;
-var version = 1.0;
+var version = 2.0;
 
 function initDb(oncomplete) {
   var request = indexedDB.open("TestDatabase", version);
@@ -98,6 +94,9 @@ function initDb(oncomplete) {
   };
   request.onupgradeneeded = function (evt) {  
     var db = request.result;
+    if (db.objectStoreNames.contains("books")) {
+      db.deleteObjectStore("books");
+    }
     var store = db.createObjectStore("books", {keyPath: "isbn"});
     var titleIndex = store.createIndex("by_title", "title", {unique: true});
     var authorIndex = store.createIndex("by_author", "author");
@@ -117,32 +116,42 @@ var main = function() {
   }).then(function() {
     addMoreBooks();
   }).then(function() {
-    getBooks("Fred").then(function(books) {
+    return getBooks("Fred").then(function(books) {
      console.log(books.join(", "));
     });
-  });
+  }).then(function() {
+    return lookupBook("Bedrock Nights");
+  }).then(logToConsole)
+  .then(function() {
+    return lookupBook("Test3");
+  })
+  .then(logToConsole);
 }
 initDb(main);
 
-/*var tx = db.transaction("books", "readwrite");
-var store = tx.objectStore("books");
-
-store.put({title: "Quarry Memories", author: "Fred", isbn: 123456});
-store.put({title: "Water Buffaloes", author: "Fred", isbn: 234567});
-store.put({title: "Bedrock Nights", author: "Barney", isbn: 345678});
-
-tx.oncomplete = function() {
-  // All requests have succeeded and the transaction has committed.
-};*/
+var lookupBook = function(bookName) {
+  var book;
+  return pdb.transact(db, "books", "readonly")
+    .then(function(txn) {
+      var store = txn.objectStore("books");
+      var index = store.index("by_title");
+      return pdb.get(index, bookName)
+        .then(function (result) {
+          book = result;
+        }).then(pdb.waitForTransaction(txn));
+    }).then(function() {
+      return book;
+    });
+}
 
 var addMoreBooks = function() {
   return pdb.transact(db, "books", "readwrite")
     .then(function(txn) {
       var objectStore = txn.objectStore("books");
-      objectStore.put({title: "Test2", author: "Fred", isbn: 1234526});
-      objectStore.put({title: "Test3", author: "Barney", isbn: 12526});
-      return txn;
-    }).then(pdb.transactionDone);
+      var p1 = pdb.put(objectStore, {title: "Test2", author: "Fred", isbn: 1234526});
+      var p2 = pdb.put(objectStore, {title: "Test3", author: "Barney", isbn: 12526});
+      return Promise.all([p1, p2, pdb.waitForTransaction(txn)]);
+    });
 }
 
 var getBooks = function(author) {
@@ -150,11 +159,11 @@ var getBooks = function(author) {
   return pdb.transact(db, "books", "readonly")
     .then(function(txn) {
       var index = txn.objectStore("books").index("by_author");
-      return pdb.openIndexCursor(txn, index, IDBKeyRange.only(author), function(control, value) {
+      return pdb.openCursor(txn, index, IDBKeyRange.only(author), function(control, value) {
         books.push(value.title);
         control.continue();
-      });
-    }).then(function(txn) {
+      }).then(pdb.waitForTransaction);
+    }).then(function() {
       return books;
     });
 }
