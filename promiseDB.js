@@ -44,7 +44,7 @@ var pdb = {
   count: function(indexOrObjectStore, key) {
     return this._transformRequestToPromise(indexOrObjectStore, indexOrObjectStore.count, [key]);
   },
-  
+
   put: function(objectStore, key, value) {
     return this._transformRequestToPromise(objectStore, objectStore.put, [key, value]);
   },
@@ -154,8 +154,8 @@ var addMoreBooks = function() {
   return pdb.transact(db, "books", "readwrite")
     .then(function(txn) {
       var objectStore = txn.objectStore("books");
-      var p1 = pdb.add(objectStore, {title: "Test2", author: "Fred", isbn: 1234526});
-      var p2 = pdb.add(objectStore, {title: "Test3", author: "Barney", isbn: 1234526});
+      var p1 = pdb.put(objectStore, {title: "Test2", author: "Fred", isbn: 1234526});
+      var p2 = pdb.put(objectStore, {title: "Test3", author: "Barney", isbn: 1234523});
       return Promise.all([p1, p2, pdb.waitForTransaction(txn)]);
     });
 }
@@ -168,8 +168,9 @@ var getBooks = function(author) {
       return pdb.openCursor(txn, index, IDBKeyRange.only(author), function(control, value) {
         books.push(value.title);
         control.continue();
-      }).then(pdb.waitForTransaction);
-    }).then(function() {
+      });
+    }).then(pdb.waitForTransaction)
+    .then(function() {
       return books;
     });
 }
