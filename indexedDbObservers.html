@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<script src="indexedDbObservers.js"></script>
+<script>
+
+var dbname = 'db' + Date.now();
+var req = indexedDB.open(dbname);
+
+req.onupgradeneeded = function() {
+  var db = req.result;
+  db.createObjectStore('s1');
+  db.createObjectStore('s2');
+};
+
+req.onsuccess = function() {
+  var db = req.result;
+  var tx = db.transaction(['s1', 's2'], 'readwrite');
+  var s1 = tx.objectStore('s1');
+  s1.addChangeListener(function(e) {
+    console.log('connection 1 saw changes: ' + JSON.stringify(e));
+    window.e = e;
+  });
+  tx.objectStore('s1').put('val1', 'k1');
+  tx.objectStore('s2').put('val2', 'k2');
+  tx.objectStore('s1').delete(IDBKeyRange.bound(0, 9999));
+};
+
+var req2 = indexedDB.open(dbname);
+req2.onsuccess = function() {
+  var db = req.result;
+  var tx = db.transaction(['s1'], 'readwrite');
+  var s1 = tx.objectStore('s1');
+  s1.addChangeListener(function(e) {
+    console.log('connection 2 saw changes: ' + JSON.stringify(e));
+    window.e = e;
+  });
+};
+
+</script>
