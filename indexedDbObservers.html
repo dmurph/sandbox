@@ -4,16 +4,17 @@
 
 var dbname = 'db' + Date.now();
 var req = indexedDB.open(dbname);
+var  db1;
 
 req.onupgradeneeded = function() {
-  var db = req.result;
-  db.createObjectStore('s1');
-  db.createObjectStore('s2');
-};
+  db1 = req.result;
+  db1.createObjectStore('s1');
+  db1.createObjectStore('s2');
+}
 
 req.onsuccess = function() {
-  var db = req.result;
-  var tx = db.transaction(['s1', 's2'], 'readwrite');
+  db1 = req.result;
+  var tx = db1.transaction(['s1', 's2'], 'readwrite');
   var s1 = tx.objectStore('s1');
   s1.addChangeListener(function(e) {
     console.log('connection 1 saw changes: ' + JSON.stringify(e));
@@ -32,7 +33,18 @@ req2.onsuccess = function() {
   s1.addChangeListener(function(e) {
     console.log('connection 2 saw changes: ' + JSON.stringify(e));
     window.e = e;
+    db.close();
+    // check that we don't see it again
+    var req = indexedDB.open(dbname);
+    req.onsuccess = function() {
+      var db = req.result;
+      var tx = db.transaction(['s1', 's2'], 'readwrite');
+      var s1 = tx.objectStore('s1');
+      tx.objectStore('s1').put('val1', 'k1');
+      tx.objectStore('s2').put('val2', 'k2');
+      tx.objectStore('s1').delete(IDBKeyRange.bound(0, 9999));
+    };
   });
-};
+}
 
 </script>

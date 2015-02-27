@@ -10,7 +10,8 @@
   };
   var closeDatabase = function(db) {
     db._listeners = {};
-    var list = connections[this.name], index = list.indexOf(this);
+    var list = connections[db.name];
+    var index = list.indexOf(db);
     list.splice(index, 1);
   };
 
