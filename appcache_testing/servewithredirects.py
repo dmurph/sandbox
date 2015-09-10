@@ -2,17 +2,13 @@ import time
 import BaseHTTPServer
 import SimpleHTTPServer
 
-
-HOST_NAME = 'localhost' # !!!REMEMBER TO CHANGE THIS!!!
-PORT_NUMBER = 8000 # Maybe set this to 9000.
-
-REDIRECTS = 0
+HOST_NAME = 'localhost'
+PORT_NUMBER = 8000
 
 class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     def do_HEAD(self):
         print 'in HEAD, path is ' + self.path
-        global REDIRECTS
-        if "/index.html" in self.path and REDIRECTS == 0:
+        if "/index.html" in self.path and not "redirected" in self.path:
             self.send_response(301)
             self.send_header("Location", 'index2.html')
             self.end_headers()
@@ -20,14 +16,16 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         if "/index2.html" in self.path:
             self.send_response(301)
             self.send_header("Location", 'index.html')
+            self.send_header("Set-Cookie", 'redirected=true')
             self.end_headers()
-            REDIRECTS += 1
             return
         SimpleHTTPServer.SimpleHTTPRequestHandler.do_HEAD(self)
     def do_GET(self):
+        cookies = None
+        if "Cookie" in self.headers:
+            cookies = self.headers["Cookie"]
         print 'in GET, path is ' + self.path
-        global REDIRECTS
-        if "/index.html" in self.path and REDIRECTS == 0:
+        if "/index.html" in self.path and not cookies:
             print 'is index, doing HEAD'
             self.do_HEAD()
             return
