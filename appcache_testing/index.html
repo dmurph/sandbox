@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+
+<html manifest="manifest.appcache">
+	<head>
+		<title>Cache Manifest Test</title>
+		<link rel="stylesheet" type="text/css" href="styles.css">
+	</head>
+	<body>
+	<script>
+		function cancel(e) {
+		      if (e.preventDefault) { e.preventDefault(); }
+		      return false;
+		    }
+  
+		    // Tells the browser that we *can* drop on this target
+	document.addEventListener('dragover', cancel);
+	document.addEventListener('dragenter', cancel);
+	document.addEventListener('drop', function (e) {
+	    e.preventDefault();
+	    console.log(e.dataTransfer.items[0].getAsFile());
+	    e.dataTransfer.items[0].webkitGetAsEntry().file(
+	        function (file) {
+	            console.log(file);
+	        },
+	        function (error) {
+	            console.log(error);
+	        }
+	    );
+	});
+	</script>
+	</body>
+</html>
