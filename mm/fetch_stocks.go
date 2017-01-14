@@ -1,17 +1,18 @@
 package main
 
 import (
-     // "bytes"
-     "os"
+	// "bytes"
 	"fmt"
 	"golang.org/x/net/html"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"sort"
 	"strconv"
-	"net/url"
-	 "text/tabwriter"
-
+	"strings"
+	"text/tabwriter"
 )
 
 type mrow struct {
@@ -79,7 +80,7 @@ func parse_row(n *html.Node) mrow {
 			if err != nil {
 				log.Fatal(err)
 			}
-			s.price = price2;
+			s.price = price2
 		}
 	}
 
@@ -93,6 +94,8 @@ func parse_table(n *html.Node) {
 	// html.Render(buf, n);
 	// fmt.Printf("Got HTML!\n%s", buf)
 
+	tickerToData := make(map[string]string)
+
 	for c := n.FirstChild.NextSibling.FirstChild.NextSibling.NextSibling; c != nil; c = c.NextSibling {
 		// fmt.Printf("Got node type %s\n", c.Type)
 		if c.Type != html.ElementNode {
@@ -100,15 +103,55 @@ func parse_table(n *html.Node) {
 			continue
 		}
 		if c.Data == "tr" {
-			s = append(s, parse_row(c))
+			var row = parse_row(c)
+			s = append(s, row)
+			tickerToData[row.symbol] = ""
 		}
 	}
+	keys := make([]string, 0, len(tickerToData))
+	for k := range tickerToData {
+		keys = append(keys, k)
+	}
+	var all = strings.Join(keys, ",")
+	// fmt.Println(all)
+	var call = "http://finance.yahoo.com/d/quotes.csv?s=" + all + "&f=spm8m6w"
+	// fmt.Println(call)
+
+	resp, err := http.Get(call)
+	if err != nil {
+		log.Fatal(err)
+	}
+	htmlData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var body = string(htmlData)
+
+	// fmt.Printf("%s\n", body)
+	var prices = strings.Split(body, "\n");
+	pricesMap := make(map[string]string)
+	for _, i := range prices {
+		if i == "" {
+			continue
+		}
+		i = strings.Replace(i, "\"", "", -1);
+		var sections = strings.SplitN(i, ",", 2);
+		if len(sections) == 0 {
+			continue;
+		}
+		pricesMap[sections[0]] = strings.Replace(sections[1], ",", "\t", -1);
+	}
+
+	resp.Body.Close()
+
 	sort.Sort(s)
+
 	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintln(w, "Name\tDate\tCall\tSymbol\tPrice")
+	w.Init(os.Stdout, 5, 8, 1, '\t', 0)
+	fmt.Fprintln(w, "Name\tDate\tCall\tSymbol\tPrice\tPrevious Close\t50 Day %\t200 Day %\t52 Weeks")
 	for _, a := range s {
-	  fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%.2f\n", a.name, a.date, a.rec, a.symbol, a.price);
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%.2f\t", a.name, a.date, a.rec, a.symbol, a.price)
+		fmt.Fprintf(w, "%s\n", pricesMap[a.symbol])
 	}
 	w.Flush()
 }
@@ -116,11 +159,10 @@ func parse_table(n *html.Node) {
 func main() {
 	// resp, err := http.Get("http://madmoney.thestreet.com/screener/index.cfm?showview=stocks&showrows=500")
 	resp, err := http.PostForm("http://madmoney.thestreet.com/screener/index.cfm?showview=stocks&showrows=500",
-		url.Values{"x": {"26"}, "y": {"12"},"airdate": {"30"},})
+		url.Values{"x": {"26"}, "y": {"12"}, "airdate": {"30"}})
 	if err != nil {
 		log.Fatal(err)
 	}
-
 
 	doc, err := html.Parse(resp.Body)
 	resp.Body.Close()
