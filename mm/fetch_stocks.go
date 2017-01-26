@@ -13,23 +13,46 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 )
 
 type mrow struct {
-	name   string
-	symbol string
-	date   string
-	rec    int
-	price  float64
+	name        string
+	symbol      string
+	date        time.Time
+	rec         int
+	price       float64
+	currPrice   float64
+	last50Diff  float64
+	last200Diff float64
+	priceRange  string
 }
+
 type mrows []mrow
 
 func (slice mrows) Len() int {
 	return len(slice)
 }
 
+func Value(row mrow) int {
+	var value = 0
+	if row.last50Diff < 0 {
+		value++
+	}
+	if row.last200Diff < 0 {
+		value++
+	}
+	value += row.rec
+	return value
+}
+
 func (slice mrows) Less(i, j int) bool {
-	return slice[i].symbol < slice[j].symbol
+	var iVal = Value(slice[i])
+	var jVal = Value(slice[j])
+	if iVal == jVal {
+		return slice[i].date.UnixNano() > slice[j].date.UnixNano()
+	}
+	return iVal > jVal
 }
 
 func (slice mrows) Swap(i, j int) {
@@ -55,7 +78,12 @@ func parse_row(n *html.Node) mrow {
 			s.symbol = c.FirstChild.NextSibling.FirstChild.Data
 		}
 		if num == 1 {
-			s.date = c.FirstChild.Data
+			var dateFields = strings.Split(c.FirstChild.Data, "/")
+			var month, day int64
+			month, _ = strconv.ParseInt(dateFields[0], 10, 64)
+			day, _ = strconv.ParseInt(dateFields[1], 10, 64)
+			var location, _ = time.LoadLocation("America/New_York")
+			s.date = time.Date(time.Now().Year(), time.Month(int(month)), int(day), 0, 0, 0, 0, location)
 		}
 		if num == 3 {
 			var found = false
@@ -89,12 +117,11 @@ func parse_row(n *html.Node) mrow {
 
 func parse_table(n *html.Node) {
 	// print("parsing able\n")
-	s := make(mrows, 0)
 	// buf := new(bytes.Buffer)
 	// html.Render(buf, n);
 	// fmt.Printf("Got HTML!\n%s", buf)
 
-	tickerToData := make(map[string]string)
+	tickerToData := make(map[string]mrow)
 
 	for c := n.FirstChild.NextSibling.FirstChild.NextSibling.NextSibling; c != nil; c = c.NextSibling {
 		// fmt.Printf("Got node type %s\n", c.Type)
@@ -104,8 +131,7 @@ func parse_table(n *html.Node) {
 		}
 		if c.Data == "tr" {
 			var row = parse_row(c)
-			s = append(s, row)
-			tickerToData[row.symbol] = ""
+			tickerToData[row.symbol] = row
 		}
 	}
 	keys := make([]string, 0, len(tickerToData))
@@ -128,21 +154,33 @@ func parse_table(n *html.Node) {
 	var body = string(htmlData)
 
 	// fmt.Printf("%s\n", body)
-	var prices = strings.Split(body, "\n");
-	pricesMap := make(map[string]string)
+	var prices = strings.Split(body, "\n")
 	for _, i := range prices {
 		if i == "" {
 			continue
 		}
-		i = strings.Replace(i, "\"", "", -1);
-		var sections = strings.SplitN(i, ",", 2);
+		i = strings.Replace(i, "\"", "", -1)
+		var sections = strings.SplitN(i, ",", 2)
 		if len(sections) == 0 {
-			continue;
+			continue
 		}
-		pricesMap[sections[0]] = strings.Replace(sections[1], ",", "\t", -1);
+		var prices = strings.SplitN(sections[1], ",", -1)
+		row := tickerToData[sections[0]]
+		row.currPrice, _ = strconv.ParseFloat(prices[0], 64)
+		row.last50Diff, _ = strconv.ParseFloat(strings.TrimSuffix(prices[1], "%"), 64)
+		row.last200Diff, _ = strconv.ParseFloat(strings.TrimSuffix(prices[2], "%"), 64)
+		row.priceRange = prices[3]
+		tickerToData[sections[0]] = row
 	}
 
 	resp.Body.Close()
+
+	s := make(mrows, len(tickerToData))
+	var i = 0
+	for _, row := range tickerToData {
+		s[i] = row
+		i++
+	}
 
 	sort.Sort(s)
 
@@ -150,8 +188,15 @@ func parse_table(n *html.Node) {
 	w.Init(os.Stdout, 5, 8, 1, '\t', 0)
 	fmt.Fprintln(w, "Name\tDate\tCall\tSymbol\tPrice\tPrevious Close\t50 Day %\t200 Day %\t52 Weeks")
 	for _, a := range s {
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%.2f\t", a.name, a.date, a.rec, a.symbol, a.price)
-		fmt.Fprintf(w, "%s\n", pricesMap[a.symbol])
+		if a.rec <= 3 {
+			continue
+		}
+		if a.last50Diff > 0 && a.last200Diff > 0 {
+			continue
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%.2f\t", a.name, a.date.Format("Jan _2"), a.rec, a.symbol, a.price)
+		fmt.Fprintf(w, "%.2f\t%.2f\t%.2f\t%s\n", a.currPrice, a.last50Diff, a.last200Diff, a.priceRange)
 	}
 	w.Flush()
 }
