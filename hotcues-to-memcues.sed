@@ -1,0 +1,1 @@
+s/<POSITION_MARK(.*)Num=\"[012]"(.*)<\/POSITION_MARK>/\0\n            <POSITION_MARK\1Num="-1"><\/POSITION_MARK>/g

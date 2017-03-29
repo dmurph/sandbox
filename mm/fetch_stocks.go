@@ -186,7 +186,7 @@ func parse_table(n *html.Node) {
 
 	w := new(tabwriter.Writer)
 	w.Init(os.Stdout, 5, 8, 1, '\t', 0)
-	fmt.Fprintln(w, "Name\tDate\tCall\tSymbol\tPrice\tPrevious Close\t50 Day %\t200 Day %\t52 Weeks")
+	fmt.Fprintln(w, "Name\tDate\tCall\tSymbol\tPrice\tPrevious Close\tChange% 50 Avg\tChange% 200 Avg\t52 Weeks")
 	for _, a := range s {
 		if a.rec <= 3 {
 			continue
